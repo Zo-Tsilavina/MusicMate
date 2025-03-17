@@ -8,7 +8,7 @@ const HomeScreen = () => {
   const [audioFiles, setAudioFiles] = useState<string[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [isPlaying, setIsPlaying] = useState(false);
-  const [currentTrack, setCurrentTrack] = useState<string | null>(null);
+  const [currentTrackIndex, setCurrentTrackIndex] = useState<number | null>(null);
 
   useEffect(() => {
     const requestPermissions = async () => {
@@ -80,24 +80,28 @@ const HomeScreen = () => {
     }
   };
 
-  const playTrack = async (path: string) => {
+  const playTrack = async (index: number) => {
     try {
       // Réinitialise le lecteur
       await TrackPlayer.reset();
 
-      // Ajoute le fichier à la file d’attente
-      await TrackPlayer.add({
-        id: path,
-        url: `file://${path}`, // Chemin local
+      // Crée une file de lecture avec tous les fichiers MP3
+      const tracks = audioFiles.map((path, i) => ({
+        id: i.toString(),
+        url: `file://${path}`,
         title: path.split('/').pop(),
         artist: 'Unknown',
-      });
+      }));
 
-      // Démarre la lecture
+      // Ajoute tous les fichiers à la file d’attente
+      await TrackPlayer.add(tracks);
+
+      // Passe directement au fichier sélectionné
+      await TrackPlayer.skip(index);
       await TrackPlayer.play();
       setIsPlaying(true);
-      setCurrentTrack(path);
-      console.log('Lecture démarrée :', path);
+      setCurrentTrackIndex(index);
+      console.log('Lecture démarrée :', audioFiles[index]);
     } catch (error) {
       console.log('Erreur lors de la lecture :', error);
       Alert.alert('Erreur', `Impossible de lire le fichier : ${error.message}`);
@@ -115,8 +119,32 @@ const HomeScreen = () => {
     }
   };
 
-  const renderItem = ({ item }: { item: string }) => (
-    <TouchableOpacity onPress={() => playTrack(item)}>
+  const playNext = async () => {
+    if (currentTrackIndex === null || currentTrackIndex >= audioFiles.length - 1) {
+      return; // Pas de fichier suivant
+    }
+    const nextIndex = currentTrackIndex + 1;
+    await TrackPlayer.skip(nextIndex);
+    await TrackPlayer.play();
+    setCurrentTrackIndex(nextIndex);
+    setIsPlaying(true);
+    console.log('Passage au suivant :', audioFiles[nextIndex]);
+  };
+
+  const playPrevious = async () => {
+    if (currentTrackIndex === null || currentTrackIndex <= 0) {
+      return; // Pas de fichier précédent
+    }
+    const prevIndex = currentTrackIndex - 1;
+    await TrackPlayer.skip(prevIndex);
+    await TrackPlayer.play();
+    setCurrentTrackIndex(prevIndex);
+    setIsPlaying(true);
+    console.log('Retour au précédent :', audioFiles[prevIndex]);
+  };
+
+  const renderItem = ({ item, index }: { item: string; index: number }) => (
+    <TouchableOpacity onPress={() => playTrack(index)}>
       <View style={styles.item}>
         <Text style={styles.itemText}>{item.split('/').pop()}</Text>
       </View>
@@ -137,16 +165,24 @@ const HomeScreen = () => {
             renderItem={renderItem}
             keyExtractor={item => item}
           />
-          {currentTrack && (
+          {currentTrackIndex !== null && (
             <View style={styles.playerControls}>
               <Text style={styles.currentTrack}>
-                En lecture : {currentTrack.split('/').pop()}
+                En lecture : {audioFiles[currentTrackIndex].split('/').pop()}
               </Text>
-              <TouchableOpacity style={styles.playButton} onPress={togglePlayback}>
-                <Text style={styles.buttonText}>
-                  {isPlaying ? 'Pause' : 'Play'}
-                </Text>
-              </TouchableOpacity>
+              <View style={styles.buttonRow}>
+                <TouchableOpacity style={styles.controlButton} onPress={playPrevious}>
+                  <Text style={styles.buttonText}>Précédent</Text>
+                </TouchableOpacity>
+                <TouchableOpacity style={styles.controlButton} onPress={togglePlayback}>
+                  <Text style={styles.buttonText}>
+                    {isPlaying ? 'Pause' : 'Play'}
+                  </Text>
+                </TouchableOpacity>
+                <TouchableOpacity style={styles.controlButton} onPress={playNext}>
+                  <Text style={styles.buttonText}>Suivant</Text>
+                </TouchableOpacity>
+              </View>
             </View>
           )}
         </>
@@ -200,7 +236,12 @@ const styles = StyleSheet.create({
     color: '#fff',
     marginBottom: 10,
   },
-  playButton: {
+  buttonRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    width: '80%',
+  },
+  controlButton: {
     backgroundColor: '#6200ee',
     paddingVertical: 10,
     paddingHorizontal: 20,
