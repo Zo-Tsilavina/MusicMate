@@ -1,11 +1,14 @@
 import React, { useEffect, useState } from 'react';
-import { View, Text, FlatList, StyleSheet, Platform, Alert } from 'react-native';
+import { View, Text, FlatList, StyleSheet, Platform, Alert, TouchableOpacity } from 'react-native';
 import RNFS from 'react-native-fs';
 import { check, request, PERMISSIONS, RESULTS } from 'react-native-permissions';
+import TrackPlayer, { State } from 'react-native-track-player';
 
 const HomeScreen = () => {
   const [audioFiles, setAudioFiles] = useState<string[]>([]);
   const [isLoading, setIsLoading] = useState(false);
+  const [isPlaying, setIsPlaying] = useState(false);
+  const [currentTrack, setCurrentTrack] = useState<string | null>(null);
 
   useEffect(() => {
     const requestPermissions = async () => {
@@ -77,10 +80,47 @@ const HomeScreen = () => {
     }
   };
 
+  const playTrack = async (path: string) => {
+    try {
+      // Réinitialise le lecteur
+      await TrackPlayer.reset();
+
+      // Ajoute le fichier à la file d’attente
+      await TrackPlayer.add({
+        id: path,
+        url: `file://${path}`, // Chemin local
+        title: path.split('/').pop(),
+        artist: 'Unknown',
+      });
+
+      // Démarre la lecture
+      await TrackPlayer.play();
+      setIsPlaying(true);
+      setCurrentTrack(path);
+      console.log('Lecture démarrée :', path);
+    } catch (error) {
+      console.log('Erreur lors de la lecture :', error);
+      Alert.alert('Erreur', `Impossible de lire le fichier : ${error.message}`);
+    }
+  };
+
+  const togglePlayback = async () => {
+    const state = await TrackPlayer.getState();
+    if (state === State.Playing) {
+      await TrackPlayer.pause();
+      setIsPlaying(false);
+    } else {
+      await TrackPlayer.play();
+      setIsPlaying(true);
+    }
+  };
+
   const renderItem = ({ item }: { item: string }) => (
-    <View style={styles.item}>
-      <Text style={styles.itemText}>{item.split('/').pop()}</Text>
-    </View>
+    <TouchableOpacity onPress={() => playTrack(item)}>
+      <View style={styles.item}>
+        <Text style={styles.itemText}>{item.split('/').pop()}</Text>
+      </View>
+    </TouchableOpacity>
   );
 
   return (
@@ -91,11 +131,25 @@ const HomeScreen = () => {
       ) : audioFiles.length === 0 ? (
         <Text style={styles.noFilesText}>Aucun fichier MP3 trouvé</Text>
       ) : (
-        <FlatList
-          data={audioFiles}
-          renderItem={renderItem}
-          keyExtractor={item => item}
-        />
+        <>
+          <FlatList
+            data={audioFiles}
+            renderItem={renderItem}
+            keyExtractor={item => item}
+          />
+          {currentTrack && (
+            <View style={styles.playerControls}>
+              <Text style={styles.currentTrack}>
+                En lecture : {currentTrack.split('/').pop()}
+              </Text>
+              <TouchableOpacity style={styles.playButton} onPress={togglePlayback}>
+                <Text style={styles.buttonText}>
+                  {isPlaying ? 'Pause' : 'Play'}
+                </Text>
+              </TouchableOpacity>
+            </View>
+          )}
+        </>
       )}
     </View>
   );
@@ -133,6 +187,28 @@ const styles = StyleSheet.create({
     color: '#fff',
     textAlign: 'center',
     marginTop: 20,
+  },
+  playerControls: {
+    padding: 10,
+    backgroundColor: '#1e1e1e',
+    borderRadius: 10,
+    margin: 10,
+    alignItems: 'center',
+  },
+  currentTrack: {
+    fontSize: 16,
+    color: '#fff',
+    marginBottom: 10,
+  },
+  playButton: {
+    backgroundColor: '#6200ee',
+    paddingVertical: 10,
+    paddingHorizontal: 20,
+    borderRadius: 5,
+  },
+  buttonText: {
+    color: '#fff',
+    fontSize: 16,
   },
 });
 
